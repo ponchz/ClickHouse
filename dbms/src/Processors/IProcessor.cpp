@@ -36,6 +36,8 @@ std::string IProcessor::statusToName(Status status)
         case Status::Wait:
             return "Wait";
     }
+
+    __builtin_unreachable();
 }
 
 }
