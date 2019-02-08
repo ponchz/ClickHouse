@@ -16,12 +16,17 @@ void printPipeline(const Processors & processors, const Statuses & statuses, Wri
 {
     out << "digraph\n{\n";
 
+    auto get_proc_id = [](const IProcessor & proc) -> UInt64
+    {
+        return reinterpret_cast<std::uintptr_t>(&proc);
+    };
+
     auto statuses_iter = statuses.begin();
 
     /// Nodes // TODO quoting and escaping
     for (const auto & processor : processors)
     {
-        out << "n" << processor.get() << "[label=" << processor->getName();
+        out << "n" << get_proc_id(*processor) << "[label=" << processor->getName();
 
         if (statuses_iter != statuses.end())
         {
@@ -40,7 +45,7 @@ void printPipeline(const Processors & processors, const Statuses & statuses, Wri
             const IProcessor & curr = *processor;
             const IProcessor & next = port.getInputPort().getProcessor();
 
-            out << "n" << &curr << " -> " << "n" << &next << ";\n";
+            out << "n" << get_proc_id(curr) << " -> " << "n" << get_proc_id(next) << ";\n";
         }
     }
     out << "}\n";

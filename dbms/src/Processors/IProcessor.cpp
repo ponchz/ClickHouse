@@ -11,7 +11,7 @@ void IProcessor::dump() const
 
     std::cerr << "inputs:\n";
     for (const auto & port : inputs)
-        std::cerr << "\t" << port.hasData() << " " << port.isNeeded() << " " << port.isFinished() << "\n";
+        std::cerr << "\t" << port.hasData() << " " << port.isFinished() << "\n";
 
     std::cerr << "outputs:\n";
     for (const auto & port : outputs)
