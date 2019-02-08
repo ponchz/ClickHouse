@@ -21,7 +21,10 @@ ISimpleTransform::Status ISimpleTransform::prepare()
     }
 
     if (!output.canPush())
+    {
+        input.setNotNeeded();
         return Status::PortFull;
+    }
 
     /// Output if has data.
     if (transformed)

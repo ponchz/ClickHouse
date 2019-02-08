@@ -12,16 +12,16 @@ ConcatProcessor::Status ConcatProcessor::prepare()
 
     if (output.isFinished())
     {
-        for (auto & input : inputs)
-            input.close();
+        for (; current_input != inputs.end(); ++current_input)
+            current_input->close();
 
         return Status::Finished;
     }
 
     if (!output.isNeeded())
     {
-        for (auto & input : inputs)
-            input.setNotNeeded();
+        if (current_input != inputs.end())
+            current_input->setNotNeeded();
 
         return Status::PortFull;
     }
@@ -33,7 +33,6 @@ ConcatProcessor::Status ConcatProcessor::prepare()
 
     if (current_input == inputs.end())
         return Status::Finished;
-
 
     if (current_input->isFinished())
     {
