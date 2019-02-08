@@ -29,6 +29,7 @@ private:
         Preparing,
         Executing,
         Finished,
+        Async
     };
 
     struct Node
@@ -53,8 +54,10 @@ private:
     Queue finished_execution_queue;
     std::mutex finished_execution_mutex;
     ExceptionHandler exception_handler;
+    EventCounter event_counter;
 
-    UInt64 num_executing_tasks = 0;
+    UInt64 num_waited_tasks = 0;
+    UInt64 num_tasks_to_wait = 0;
 
 public:
     explicit PipelineExecutor(Processors processors, ThreadPool * pool = nullptr);
@@ -69,9 +72,10 @@ private:
     void processFinishedExecutionQueueSafe();
     bool addProcessorToPrepareQueueIfCan(Edge & edge);
     void processPrepareQueue();
+    void processAsyncQueue();
     void addJob(UInt64 pid);
     void addAsyncJob(UInt64 pid);
-    void prepareProcessor(size_t pid);
+    void prepareProcessor(size_t pid, bool async);
 };
 
 }

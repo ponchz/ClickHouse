@@ -106,7 +106,6 @@ void PipelineExecutor::processFinishedExecutionQueue()
         UInt64 proc = finished_execution_queue.front();
         finished_execution_queue.pop();
 
-        --num_executing_tasks;
         graph[proc].status = ExecStatus::Preparing;
         prepare_queue.push(proc);
     }
@@ -143,36 +142,38 @@ bool PipelineExecutor::addProcessorToPrepareQueueIfCan(Edge & edge)
 
 void PipelineExecutor::addJob(UInt64 pid)
 {
-    ++num_executing_tasks;
-
     if (pool)
     {
         auto job = [this, pid]()
         {
             graph[pid].processor->work();
 
-            std::lock_guard lock(finished_execution_mutex);
-            finished_execution_queue.push(pid);
+            {
+                std::lock_guard lock(finished_execution_mutex);
+                finished_execution_queue.push(pid);
+            }
+
+            event_counter.notify();
         };
 
         pool->schedule(createExceptionHandledJob(std::move(job), exception_handler));
+        ++num_tasks_to_wait;
     }
-    else /// Execute task in main thread.
+    else
+    {
+        /// Execute task in main thread.
         graph[pid].processor->work();
+        finished_execution_queue.push(pid);
+    }
 }
 
 void PipelineExecutor::addAsyncJob(UInt64 pid)
 {
-    ++num_executing_tasks;
-    EventCounter event_counter;
     graph[pid].processor->schedule(event_counter);
-    event_counter.wait();
-    finished_execution_queue.push(pid);
-
-    /// TODO: support on finished lambda execution for processors.
+    ++num_tasks_to_wait;
 }
 
-void PipelineExecutor::prepareProcessor(UInt64 pid)
+void PipelineExecutor::prepareProcessor(UInt64 pid, bool async)
 {
     auto & node = graph[pid];
     auto status = node.processor->prepare();
@@ -221,7 +222,8 @@ void PipelineExecutor::prepareProcessor(UInt64 pid)
         }
         case IProcessor::Status::Wait:
         {
-            throw Exception("Wait is not supported for PipelineExecutor", ErrorCodes::LOGICAL_ERROR);
+            if (!async)
+                throw Exception("Processor returned status Wait before Async.", ErrorCodes::LOGICAL_ERROR);
         }
     }
 }
@@ -233,19 +235,47 @@ void PipelineExecutor::processPrepareQueue()
         UInt64 proc = prepare_queue.front();
         prepare_queue.pop();
 
-        prepareProcessor(proc);
+        prepareProcessor(proc, false);
 
     }
+}
+
+void PipelineExecutor::processAsyncQueue()
+{
+    UInt64 num_processors = processors.size();
+    for (UInt64 node = 0; node < num_processors; ++node)
+        if (graph[node].status == ExecStatus::Async)
+            prepareProcessor(node, true);
 }
 
 void PipelineExecutor::execute()
 {
     addChildlessProcessorsToQueue();
 
-    while (num_executing_tasks || !prepare_queue.empty())
+    while (true)
     {
         processFinishedExecutionQueueSafe();
         processPrepareQueue();
+        processAsyncQueue();
+
+        if (prepare_queue.empty())
+        {
+            /// For single-thread executor.
+            if (!pool && !finished_execution_queue.empty())
+                continue;
+
+            if (num_tasks_to_wait > num_waited_tasks)
+            {
+                /// Try wait anything.
+                event_counter.wait();
+                ++num_waited_tasks;
+            }
+            else
+            {
+                /// Here prepare_queue is empty and we have nobody to wait for. Exiting.
+                break;
+            }
+        }
     }
 
     bool all_processors_finished = true;
