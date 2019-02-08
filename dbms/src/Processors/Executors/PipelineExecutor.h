@@ -4,6 +4,7 @@
 #include <Processors/IProcessor.h>
 #include <mutex>
 #include <Common/ThreadPool.h>
+#include <Common/EventCounter.h>
 
 namespace DB
 {
