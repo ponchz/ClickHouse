@@ -2,11 +2,8 @@
 
 #include <queue>
 #include <Processors/IProcessor.h>
-
-template <typename>
-class ThreadPoolImpl;
-class ThreadFromGlobalPool;
-using ThreadPool = ThreadPoolImpl<ThreadFromGlobalPool>;
+#include <mutex>
+#include <Common/ThreadPool.h>
 
 namespace DB
 {
@@ -15,55 +12,66 @@ class PipelineExecutor
 {
 private:
     Processors processors;
-    ThreadPool & pool;
+    ThreadPool * pool;
 
-    struct DirectEdge
+    struct Edge
     {
-        size_t to;
+        UInt64 to = std::numeric_limits<UInt64>::max();
+        UInt64 version = 0;
+        UInt64 prev_version = 0;
     };
 
-    using DirectEdges = std::vector<DirectEdge>;
-
-    struct BackEdge
-    {
-        size_t from;
-    };
-
-    using BackEdges = std::vector<BackEdge>;
+    using Edges = std::vector<Edge>;
 
     enum class ExecStatus
     {
-        None,
+        Idle,
         Preparing,
         Executing,
         Finished,
-        Idle, /// Prepare was called, but some error status was returned
     };
 
     struct Node
     {
         IProcessor * processor = nullptr;
-        DirectEdges directEdges;
-        BackEdges backEdges;
+        Edges directEdges;
+        Edges backEdges;
 
-        ExecStatus status = ExecStatus::None;
-        IProcessor::Status idle_status; /// What prepare() returned if status is Idle.
+        ExecStatus status = ExecStatus::Idle;
+        IProcessor::Status last_processor_status;
     };
 
     using Nodes = std::vector<Node>;
 
     Nodes graph;
 
+    using Queue = std::queue<UInt64>;
+
+    /// Queue of processes which we want to call prepare. Is used only in main thread.
+    Queue prepare_queue;
+    /// Queue of processes which have finished execution. Must me used with mutex if executing with pool.
+    Queue finished_execution_queue;
+    std::mutex finished_execution_mutex;
+    ExceptionHandler exception_handler;
+
+    UInt64 num_executing_tasks = 0;
+
 public:
-    PipelineExecutor(const Processors & processors, ThreadPool & pool) : processors(processors), pool(pool) {}
+    explicit PipelineExecutor(Processors processors, ThreadPool * pool = nullptr);
     void execute();
 
     String getName() const { return "PipelineExecutor"; }
 
 private:
     void buildGraph();
-    void prepareProcessor(std::queue<size_t> & jobs, size_t pid);
-    void traverse(std::queue<size_t> & preparing, size_t pid);
+    void addChildlessProcessorsToQueue();
+    void processFinishedExecutionQueue();
+    void processFinishedExecutionQueueSafe();
+    bool addProcessorToPrepareQueueIfCan(Edge & edge);
+    void processPrepareQueue();
+    void addJob(UInt64 pid);
+    void addAsyncJob(UInt64 pid);
+    void prepareProcessor(size_t pid);
 };
 
 }

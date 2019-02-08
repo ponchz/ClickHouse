@@ -166,11 +166,19 @@ class InputPort : public Port
 private:
     OutputPort * output_port = nullptr;
 
+    /// If version was set, it will be increased on each pull.
+    UInt64 * version = nullptr;
+
 public:
     using Port::Port;
 
+    void setVersion(UInt64 * value) { version = value; }
+
     Block pull()
     {
+        if (version)
+            ++(*version);
+
         assumeConnected();
         return state->pull();
     }
@@ -225,11 +233,19 @@ class OutputPort : public Port
 private:
     InputPort * input_port = nullptr;
 
+    /// If version was set, it will be increased on each push.
+    UInt64 * version = nullptr;
+
 public:
     using Port::Port;
 
+    void setVersion(UInt64 * value) { version = value; }
+
     void push(Block block)
     {
+        if (version)
+            ++(*version);
+
         assumeConnected();
         state->push(std::move(block));
     }
