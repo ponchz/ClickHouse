@@ -18,7 +18,7 @@ private:
     struct Edge
     {
         UInt64 to = std::numeric_limits<UInt64>::max();
-        UInt64 version = 0;
+        UInt64 version = 1;
         UInt64 prev_version = 0;
     };
 

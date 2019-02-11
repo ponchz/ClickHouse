@@ -42,7 +42,7 @@ void PipelineExecutor::buildGraph()
 
         for (InputPort & input_port : processors[node]->getInputs())
         {
-            const IProcessor * proc = &input_port.getProcessor();
+            const IProcessor * proc = &input_port.getOutputPort().getProcessor();
 
             auto it = proc_map.find(proc);
             if (it == proc_map.end())
@@ -64,7 +64,7 @@ void PipelineExecutor::buildGraph()
 
         for (OutputPort & output_port : processors[node]->getOutputs())
         {
-            const IProcessor * proc = &output_port.getProcessor();
+            const IProcessor * proc = &output_port.getInputPort().getProcessor();
 
             auto it = proc_map.find(proc);
             if (it == proc_map.end())
@@ -126,7 +126,7 @@ void PipelineExecutor::processFinishedExecutionQueueSafe()
 bool PipelineExecutor::addProcessorToPrepareQueueIfCan(Edge & edge)
 {
     /// Don't add processor if nothing was read from port.
-    if (edge.version != edge.prev_version)
+    if (edge.version == edge.prev_version)
         return false;
 
     auto & node = graph[edge.to];
